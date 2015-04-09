@@ -1,0 +1,6 @@
+library(shiny)
+if (!require(devtools))
+  install.packages("devtools")
+devtools::install_github("jcheng5/leaflet-shiny")
+devtools::install_github("AnalytixWare/ShinySky")
+runApp("/")
