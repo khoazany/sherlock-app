@@ -16,6 +16,29 @@ shinyUI(fluidPage(
         color: #48ca3b;
       }
 
+      .progress-bar {
+        background-color: #34c2e3;
+        height: 25px;
+        padding: 5px;
+        width: 350px;
+        margin: 50px 0;
+        border-radius: 5px;box-shadow: 0 1px 5px #000 inset, 0 1px 0 #444;
+                    }
+                    
+                    .progress-bar span {
+background-size: 30px 30px;
+    background-image: linear-gradient(135deg, rgba(255, 255, 255, .15) 25%, transparent 25%,
+                        transparent 50%, rgba(255, 255, 255, .15) 50%, rgba(255, 255, 255, .15) 75%,
+                        transparent 75%, transparent);            
+    
+    animation: animate-stripes 3s linear infinite;
+                    display: inline-block;
+                    height: 100%;
+                    border-radius: 3px;
+                    box-shadow: 0 1px 0 rgba(255, 255, 255, .5) inset;
+                    transition: width .4s ease-in-out;    
+                    }
+
     "))
   ),
   
@@ -30,19 +53,31 @@ shinyUI(fluidPage(
       )
     ),
     fluidRow(
+      column(12,
+             htmlOutput("details1")
+      )
+    ),
+    fluidRow(
+      column(12,
+             htmlOutput("details2")
+      )
+    ),
+    fluidRow(
       tabsetPanel(
-        tabPanel("Attribute/Crime Type 1",
-                 htmlOutput("details1"),
+        tabPanel("Map 1",
                  verbatimTextOutput("moran1Stat"),
                  verbatimTextOutput("moran1PValue"),
                  plotOutput('hist1', width='100%', height='250px'),
                  plotOutput('scatterPlot1', width='100%', height='250px')
         ),
-        tabPanel("Attribute/Crime Type 2",
+        tabPanel("Map 2",
                  verbatimTextOutput("moran2Stat"),
                  verbatimTextOutput("moran2PValue"),
                  plotOutput('hist2', width='100%', height='250px'),
                  plotOutput('scatterPlot2', width='100%', height='250px')
+        ),
+        tabPanel("Correlation",
+                 plotOutput('correlation', width='100%', height='250px')
         )
       )
     )
@@ -63,7 +98,15 @@ shinyUI(fluidPage(
              textInput("column_used",label = h5("Column To Compare"),value="")
       ),
       column(4,
-             fileInput("file", label = h5("Upload data"))
+             fileInput("file", label = h5("Upload data")),
+             tags$script('
+    Shiny.addCustomMessageHandler("resetFileInputHandler", function(x) {      
+        var id = "#" + x + "_progress";      # name of progress bar is file1_progress
+        var idBar = id + " .bar";  
+        $(id).css("visibility", "hidden");   # change visibility
+        $(idBar).css("width", "0%");         # reset bar to 0%
+    });
+  ')
       )
     ),
     fluidRow(
@@ -106,8 +149,8 @@ shinyUI(fluidPage(
       column(4,
              selectInput("rangeType", label = h6("Select the range type (in case of choropleth map)"), 
                          choices = list(
-                           "Equal Range" = "Equal Range",
-                           "Natural Break" = "Natural Break"
+                           "Natural Break" = "Natural Break",
+                           "Equal Range" = "Equal Range"
                          )
              )
       )
@@ -120,8 +163,8 @@ shinyUI(fluidPage(
                initialTileLayer = "//{s}.tiles.mapbox.com/v3/jcheng.map-5ebohr46/{z}/{x}/{y}.png",
                initialTileLayerAttribution = HTML('Maps by <a href="http://www.mapbox.com/">Mapbox</a>'),
                options=list(
-                 center = c(51.4758, -0.4195),
-                 zoom = 10
+                 center = c(51.5124, -0.091354),
+                 zoom = 12
                )
              )
       ),
@@ -130,20 +173,21 @@ shinyUI(fluidPage(
       )
     ),
     fluidRow(
-      column(12,
+      column(9,
+             tags$head(tags$link(rel='stylesheet', type='text/css', href='styles.css')),
              leafletMap(
                "map2", "100%", 400,
                initialTileLayer = "//{s}.tiles.mapbox.com/v3/jcheng.map-5ebohr46/{z}/{x}/{y}.png",
                initialTileLayerAttribution = HTML('Maps by <a href="http://www.mapbox.com/">Mapbox</a>'),
                options=list(
-                 center = c(51.4758, -0.4195),
-                 zoom = 10
+                 center = c(51.5124, -0.091354),
+                 zoom = 12
                )
              )
+      ),
+      column(3,
+             uiOutput("legendTable2")
       )
-    ),
-    fluidRow(
-      uiOutput("legendTable2")
     )
   )
 ))

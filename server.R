@@ -11,6 +11,8 @@ library(classInt)
 library(rgdal)
 library(RJSONIO)
 library(shinysky)
+library(RCurl)
+library(foreign)
 
 save(attribute_url,file="attribute_url.Rda")
 save(attributes,file="attributes.Rda")
@@ -38,7 +40,6 @@ shinyServer(function(input, output, session) {
   map2 <- createLeafletMap(session, 'map2')
   
   evt1 <- reactive({
-    print(input$select1)
     input$select1
   })
   
@@ -58,13 +59,13 @@ shinyServer(function(input, output, session) {
     input$rangeType
   })
   
-  mapZoom1 <- reactive({
-    ifelse(is.null(input$map1_zoom),10,input$map1_zoom)
-  })
+  #mapZoom1 <- reactive({
+  #  ifelse(is.null(input$map1_zoom),10,input$map1_zoom)
+  #})
   
-  mapZoom2 <- reactive({
-    ifelse(is.null(input$map2_zoom),10,input$map2_zoom)
-  })
+  #mapZoom2 <- reactive({
+  #  ifelse(is.null(input$map2_zoom),10,input$map2_zoom)
+  #})
   
   inputFile <- reactive({
     input$file
@@ -77,6 +78,7 @@ shinyServer(function(input, output, session) {
         showshinyalert(session,"upload_alert",
                        paste("You haven't specified attribute name or column name.Please specify and upload again.")
                        ,"warning")
+        session$sendCustomMessage(type = "resetFileInputHandler", "file") 
       } else {
         attribute_url[input$attribute_name] = inputFile()$datapath
         attributes[input$attribute_name] = input$attribute_name
@@ -104,49 +106,82 @@ shinyServer(function(input, output, session) {
   })
   
   #Define the default map zoom
-  oldMapZoom1 = 10
-  oldMapZoom2 = 10
+  #oldMapZoom1 = 10
+  #oldMapZoom2 = 10
+  
+  #observe({
+  #  if(!is.null(mapZoom1())) {
+  #    if(mapZoom1() != oldMapZoom1) {
+  #      if(mapZoom1() != mapZoom2()) {
+  #        map2$setView(input$map2_lat, input$map2_lng, mapZoom1())
+  #      }
+  #      oldMapZoom1 = mapZoom1()
+  #    }
+  #  }
+  #})
+  
+  #observe({
+  #  if(!is.null(mapZoom2())) {
+  #    print("hihi")
+  #    if(mapZoom2() != oldMapZoom2) {
+  #      print("haha")
+  #      if(mapZoom2() != mapZoom1()) {
+  #        print(input$map1_lat)
+  #        print(input$map1_lng)
+  #        print(mapZoom2())
+  #        map1$setView(input$map1_lat, input$map1_lng, mapZoom2())
+  #        print(input$map1_zoom)
+  #      }
+  #      oldMapZoom2 = mapZoom2()
+  #    }
+  #  }
+  #})
+  
+  # Create a callback function to update progress.
+  # Each time this is called:
+  # - If `value` is NULL, it will move the progress bar 1/5 of the remaining
+  #   distance. If non-NULL, it will set the progress to that value.
+  # - It also accepts optional detail text.
   
   observe({
-    if(!is.null(mapZoom1())) {
-      if(mapZoom1() != oldMapZoom1) {
-        if(mapZoom1() != mapZoom2()) {
-          map2$setView(input$map2_lat, input$map2_lng, mapZoom1())
-        }
-        oldMapZoom1 = mapZoom1()
+    # Create a Progress object
+    progress <- shiny::Progress$new()
+    progress$set(message = "Loading Data...", value = 0)
+    
+    updateProgress <- function(value = NULL, detail = NULL) {
+      if (is.null(value)) {
+        value <- progress$getValue()
+        value <- value + (progress$getMax() - value) / 8
       }
+      progress$set(value = value, detail = detail)
     }
-  })
-  
-  observe({
-    if(!is.null(mapZoom2())) {
-      print("hihi")
-      if(mapZoom2() != oldMapZoom2) {
-        print("haha")
-        if(mapZoom2() != mapZoom1()) {
-          print(input$map1_lat)
-          print(input$map1_lng)
-          print(mapZoom2())
-          map1$setView(input$map1_lat, input$map1_lng, mapZoom2())
-          print(input$map1_zoom)
-        }
-        oldMapZoom2 = mapZoom2()
-      }
-    }
-  })
-  
-  observe({
+    
+    # Close the progress when this reactive exits (even if there's an error)
+    on.exit(progress$close())
+    
     load("attribute_url.Rda")
     load("attributes.Rda")
     load("attribute_column.Rda")
     if(evt1() == "All"){
-      vnm_inc <- readOGR("Crime-polygon/all_crime.geojson","OGRGeoJSON", verbose = FALSE)
-      geojson1 <- fromJSON("Crime-polygon/all_crime.geojson")
+      #vnm_inc <- readOGR(getURLContent("https://raw.githubusercontent.com/khoazany/sherlock-app/master/Factors/MSOA_Propertyprice2013.geojson"),"OGRGeoJSON", verbose = FALSE)
+      vnm_inc <- readOGR(getURLContent("https://raw.githubusercontent.com/khoazany/sherlock-app/master/Crime-polygon/all_crime.geojson"),"OGRGeoJSON", verbose = FALSE)
+      #geojson1 <- fromJSON(getURLContent("https://raw.githubusercontent.com/khoazany/sherlock-app/master/Factors/MSOA_Propertyprice2013.geojson"))
+      geojson1 <- fromJSON(getURLContent("https://raw.githubusercontent.com/khoazany/sherlock-app/master/Crime-polygon/all_crime.geojson"))
     }else{
-      print(attribute_url);
-      vnm_inc <- readOGR(attribute_url[evt1()],"OGRGeoJSON", verbose = FALSE)
-      geojson1 <- fromJSON(attribute_url[evt1()])
+      vnm_inc <- readOGR(getURLContent(attribute_url[evt1()]),"OGRGeoJSON", verbose = FALSE)
+      geojson1 <- fromJSON(getURLContent(attribute_url[evt1()]))
     }
+    updateProgress()
+    
+    if(evt2() == "All"){
+      #vnm_inc <- readOGR(getURLContent("https://raw.githubusercontent.com/khoazany/sherlock-app/master/Factors/MSOA_Propertyprice2013.geojson"),"OGRGeoJSON", verbose = FALSE)
+      vnm_inc2 <- readOGR(getURLContent("https://raw.githubusercontent.com/khoazany/sherlock-app/master/Crime-polygon/all_crime.geojson"),"OGRGeoJSON", verbose = FALSE)
+      geojson2 <- fromJSON(getURLContent("https://raw.githubusercontent.com/khoazany/sherlock-app/master/Crime-polygon/all_crime.geojson"))
+    }else{
+      vnm_inc2 <- readOGR(getURLContent(attribute_url[evt2()]),"OGRGeoJSON", verbose = FALSE)
+      geojson2 <- fromJSON(getURLContent(attribute_url[evt2()]))
+    }
+    updateProgress()
     
     #create a (QUEEN) contiguity based neighbours
     vnm_cnq <- poly2nb(vnm_inc)
@@ -162,19 +197,27 @@ shinyServer(function(input, output, session) {
     #compute Monte Carlo Moranís I
     set.seed(1234)
     bperm =moran.mc(vnm_inc[[attribute_column[evt1()]]], listw=vnm_cnq_rsw, nsim=999)
+    #bperm =moran.mc(vnm_inc[[attribute_column["Transaction prices (2013)"]]], listw=vnm_cnq_rsw, nsim=999)
     
     #computing local moran stats
     fips <- order(vnm_inc$row)
     nclocI <- localmoran(vnm_inc[[attribute_column[evt1()]]], vnm_cnq_rsw)
+    #nclocI <- localmoran(vnm_inc[[attribute_column["Transaction prices (2013)"]]], vnm_cnq_rsw)
     
     #scatterplot of local moran
-    nci <- moran.plot(vnm_inc$row, vnm_cnq_rsw, labels=as.character(vnm_inc$MSOA11NM), xlab="Crime Density", ylab="SL Crime Density")
+    nci <- moran.plot(vnm_inc$row, vnm_cnq_rsw, labels=as.character(vnm_inc$MSOA11NM), xlab="Map 1 Selection", ylab="SL Map1 Selection")
+    
+    output$scatterPlot1 <- renderPlot({
+      nci <- moran.plot(vnm_inc$row, vnm_cnq_rsw, labels=as.character(vnm_inc$MSOA11NM), xlab="Map 1 Selection", ylab="SL Map1 Selection")
+    })
+    updateProgress()
     
     if(mapType1() == "Choropleth Map") {
       if(rangeType() == "Equal Range") {
         max1 = 0
         for(k in 1:length(geojson1$features)) {
           value = geojson1$features[[k]]$properties[[attribute_column[evt1()]]]
+          #value = geojson1$features[[k]]$properties[[attribute_column["Transaction prices (2013)"]]]
           if(value > max1) {
             max1 = value
           }
@@ -187,11 +230,12 @@ shinyServer(function(input, output, session) {
           from = head(densityBreaks, length(densityBreaks)-1),
           to = tail(densityBreaks, length(densityBreaks)-1)
         )
-        palette <- c("#FFEDA0", "#FED976", "#FEB24C", "#FD8D3C",
-                     "#FC4E2A", "#E31A1C", "#BD0026", "#800026")
+        
+        palette <- c("#FFEDA0", "#FED976", "#FEB24C", "#FD8D3C", "#FC4E2A", "#E31A1C", "#BD0026", "#800026")
         
         for(k in 1:length(geojson1$features)) {
           value = geojson1$features[[k]]$properties[[attribute_column[evt1()]]]
+          #value = geojson1$features[[k]]$properties[[attribute_column["Transaction prices (2013)"]]]
           geojson1$features[[k]]$style <- c(
             "fillColor" = getColor(value/max1),
             "weight" = 2,
@@ -202,8 +246,8 @@ shinyServer(function(input, output, session) {
           )
         }  
       } else {
-        #jenksBreak <- classIntervals(sapply(lapply(geojson1$features, `[[`, "properties"), '[[', attribute_column[evt1()]), n = 8, style = "jenks")
-        jenksBreak <- classIntervals(sapply(lapply(geojson1$features, `[[`, "properties"), '[[', "CRDENSITY"), n = 8, style = "jenks")
+        jenksBreak <- classIntervals(sapply(lapply(geojson1$features, `[[`, "properties"), '[[', attribute_column[evt1()]), n = 8, style = "jenks")
+        #jenksBreak <- classIntervals(sapply(lapply(geojson1$features, `[[`, "properties"), '[[', "CRDENSITY"), n = 8, style = "jenks")
         
         # Prepare data for legend table
         densityRanges <- data.frame(
@@ -263,29 +307,167 @@ shinyServer(function(input, output, session) {
         )
       }
     }
+    updateProgress()
+    
+    #create a (QUEEN) contiguity based neighbours
+    vnm_cnq2 <- poly2nb(vnm_inc2)
+    
+    #row-standardised weights matrix
+    vnm_cnq_rsw2 <- nb2listw(vnm_cnq2)
+    
+    #output$moran1 <- renderTable({
+    #compute Moran's I
+    #moran.test(vnminc$CRDENSITY, listw=vnm_cnq_rsw)
+    #})
+    
+    #compute Monte Carlo Moranís I
+    set.seed(1234)
+    bperm2 =moran.mc(vnm_inc2[[attribute_column[evt2()]]], listw=vnm_cnq_rsw2, nsim=999)
+    
+    #computing local moran stats
+    fips2 <- order(vnm_inc2$row)
+    nclocI2 <- localmoran(vnm_inc2[[attribute_column[evt2()]]], vnm_cnq_rsw2)
+    
+    #scatterplot of local moran
+    nci2 <- moran.plot(vnm_inc2$row, vnm_cnq_rsw2, labels=as.character(vnm_inc2$MSOA11NM), xlab="Map 2 Selection", ylab="SL Map 2 Selection")
+    
+    output$scatterPlot2 <- renderPlot({
+      nci2 <- moran.plot(vnm_inc2$row, vnm_cnq_rsw2, labels=as.character(vnm_inc2$MSOA11NM), xlab="Map 2 Selection", ylab="SL Map 2 Selection")
+    })
+    
+    output$moran1Stat <- renderText({
+      print(paste("Statistics: ",bperm$statistic))
+    })
+    output$moran1PValue <- renderText({
+      print(paste("p-value: ",bperm$p.value))
+    })
+    
+    #histogram
+    output$hist1 <- renderPlot({
+      h <- ({
+        hist(bperm$res, freq=TRUE, breaks=20, xlab="Simulated Moran's I", main= "Histogram from Monte Carlo Simulation")
+        abline(v=unname(bperm$statistic), col="red")
+      })
+      print(h)
+      # it'll show the moran's I statistics and a histogram (to test normality, in addition to p-value)
+    })
+    
+    output$moran2Stat <- renderText({
+      print(paste("Statistics: ",bperm2$statistic))
+    })
+    output$moran2PValue <- renderText({
+      print(paste("p-value: ",bperm2$p.value))
+    })
+    
+    #histogram
+    output$hist2 <- renderPlot({
+      h2 <- ({
+        hist(bperm2$res, freq=TRUE, breaks=20, xlab="Simulated Moran's I", main= "Histogram from Monte Carlo Simulation")
+        abline(v=unname(bperm2$statistic), col="red")
+      })
+      print(h2)
+      # it'll show the moran's I statistics and a histogram (to test normality, in addition to p-value)
+    })
+    updateProgress()
+    
+    if(mapType2() == "Choropleth Map") {
+      if(rangeType() == "Equal Range") {
+        max2 = 0
+        for(j in 1:length(geojson2$features)) {
+          value = geojson2$features[[j]]$properties[[attribute_column[evt2()]]]
+          if(value > max2) {
+            max2 = value
+          }
+        }
+        
+        # Prepare data for the legend table
+        densityBreaks2 <- c(0, max2*0.125, max2*0.25, max2*0.375, max2*0.5, max2*0.675, max2*0.75,
+                            max2*0.875, max2)
+        densityRanges2 <- data.frame(
+          from = head(densityBreaks2, length(densityBreaks2)-1),
+          to = tail(densityBreaks2, length(densityBreaks2)-1)
+        )
+        
+        palette2 <- c("#FFEDA0", "#FED976", "#FEB24C", "#FD8D3C", "#FC4E2A", "#E31A1C", "#BD0026", "#800026")
+        
+        for(j in 1:length(geojson2$features)) {
+          value = geojson2$features[[j]]$properties[[attribute_column[evt2()]]]
+          geojson2$features[[j]]$style <- c(
+            "fillColor" = getColor(value/max2),
+            "weight" = 2,
+            "opacity" = 1,
+            "color" = 'white',
+            "dashArray" = '3',
+            "fillOpacity" = 0.7
+          )
+        }  
+      } else {
+        #jenksBreak <- classIntervals(sapply(lapply(geojson1$features, `[[`, "properties"), '[[', attribute_column[evt1()]), n = 8, style = "jenks")
+        jenksBreak2 <- classIntervals(sapply(lapply(geojson2$features, `[[`, "properties"), '[[', attribute_column[evt2()]), n = 8, style = "jenks")
+        
+        # Prepare data for legend table
+        densityRanges2 <- data.frame(
+          from = head(jenksBreak2$brks, length(jenksBreak2$brks)-1),
+          to = tail(jenksBreak2$brks, length(jenksBreak2$brks)-1)
+        )
+        
+        palette2 <- c("#FFEDA0", "#FED976", "#FEB24C", "#FD8D3C",
+                      "#FC4E2A", "#E31A1C", "#BD0026", "#800026")
+        
+        for(j in 1:length(geojson2$features)) {
+          for(l in 1:(length(jenksBreak2$brks)-1)) {
+            value = geojson2$features[[j]]$properties[[attribute_column[evt2()]]]
+            if((l == 1 && value == 0) ||
+                 value > jenksBreak2$brks[l] && value <= jenksBreak2$brks[l+1]) {
+              geojson2$features[[j]]$style <- c(
+                "fillColor" = getColorNaturalBreak(l),
+                "weight" = 2,
+                "opacity" = 1,
+                "color" = 'white',
+                "dashArray" = '3',
+                "fillOpacity" = 0.7
+              )  
+            }
+          }
+        } 
+      }
+    } else {
+      #Mapping local outliers
+      inf12 <- apply(nci2$is.inf, 1, any)
+      x2 <- vnm_inc2[[attribute_column[evt2()]]]
+      lhx2 <- cut(x2, breaks=c(min(x2), mean(x2), max(x2)), labels=c("L", "H"), include.lowest=TRUE)
+      wx2 <- lag(vnm_cnq_rsw2, vnm_inc2[[attribute_column[evt2()]]])
+      lhwx2 <- cut(wx2, breaks=c(min(wx2), mean(wx2), max(wx2)), labels=c("L", "H"), include.lowest=TRUE)
+      lhlh2 <- interaction(lhx2, lhwx2, inf12, drop=TRUE)
+      cols2 <- rep(1, length(lhlh2))
+      cols2[lhlh2 == "H.L.TRUE"] <- 2
+      cols2[lhlh2 == "L.H.TRUE"] <- 3
+      cols2[lhlh2 == "H.H.TRUE"] <- 4
+      
+      #Prepare data for legend table
+      densityRanges2 <- data.frame(
+        from = c("Low","High","Low","High"),
+        to = c("Low","Low","High","High")
+      )
+      palette2 <- grey.colors(4, 0.95, 0.55, 2.2)
+      
+      for(j in 1:length(geojson2$features)) {
+        value = geojson2$features[[j]]$properties[[attribute_column[evt2()]]]
+        geojson2$features[[j]]$style <- c(
+          "fillColor" = grey.colors(4, 0.95, 0.55, 2.2)[cols2[[j]]],
+          "weight" = 2,
+          "opacity" = 1,
+          "color" = 'white',
+          "dashArray" = '3',
+          "fillOpacity" = 0.7
+        )
+      }
+    }
+    updateProgress()
     
     session$onFlushed(once=TRUE, function() {
       
-      output$moran1Stat <- renderText({
-        print(paste("Statistics: ",bperm$statistic))
-      })
-      output$moran1PValue <- renderText({
-        print(paste("p-value: ",bperm$p.value))
-      })
       
-      #histogram
-      output$hist1 <- renderPlot({
-        h <- ({
-          hist(bperm$res, freq=TRUE, breaks=20, xlab="Simulated Moran's I", main= "Histogram from Monte Carlo Simulation")
-          abline(v=unname(bperm$statistic), col="red")
-        })
-        print(h)
-        # it'll show the moran's I statistics and a histogram (to test normality, in addition to p-value)
-      })
-      
-      output$scatterPlot1 <- renderPlot({
-        nci
-      })
       map1$addGeoJSON(geojson1)
       output$legendTable1 <- renderUI({
         tags$table(class = "table",
@@ -301,6 +483,63 @@ shinyServer(function(input, output, session) {
                    )
         )
       })
+      updateProgress()
+      
+      map2$addGeoJSON(geojson2)
+      output$legendTable2 <- renderUI({
+        tags$table(class = "table",
+                   tags$tbody(
+                     mapply(function(from, to, color) {
+                       tags$tr(
+                         tags$td(tags$div(
+                           style = sprintf("width: 16px; height: 16px; background-color: %s;", color)
+                         )),
+                         tags$td(from, "-", to)
+                       )
+                     }, densityRanges2$from, densityRanges2$to, palette2, SIMPLIFY=FALSE)
+                   )
+        )
+      })
+      
+      #vnm_inc_merge = vnm_inc
+      #vnm_inc_merge[[attribute_column[evt2()]]] <- vnm_inc2[[attribute_column[evt2()]]]
+      
+      output$correlation <- renderPlot({
+        correlationPlot <- qplot(
+          vnm_inc[[attribute_column[evt1()]]], vnm_inc2[[attribute_column[evt2()]]], 
+          geom=c("point","smooth")) + 
+          labs(title= paste("Correlation = ",
+                            cor(vnm_inc[[attribute_column[evt1()]]],vnm_inc2[[attribute_column[evt2()]]])) )
+        
+        print(correlationPlot)
+      })
+      
+      #brushing <- reactive({
+        
+        #mysessions <- function(x) {
+          #if(is.null(x)) return(NULL)
+          #notice below the id column is how ggvis can understand which session to show 
+          #row <- vnm_inc[vnm_inc$row == x$id, ]
+          #prettyNum shows the number with thousand-comma separator  
+          #paste0("Sessions:", "&nbsp;",prettyNum(row$sessions, big.mark=",",scientific=F)) 
+        #}
+        
+        #outvis <- 
+        #  vnm_inc %>%
+        #  ggvis(~factor(date), ~sessions, key := ~id) %>%
+        #  layer_points()  %>%
+        #  add_tooltip(mysessions ,"hover") %>%
+        #  layer_paths() %>%
+        #  add_axis("x", title="Dates", 
+        #           value = c(as.character(EvolucionVisitas$date[1]),
+        #                     as.character(EvolucionVisitas$date[round(length(EvolucionVisitas$date)/2,0)]),
+        #                     as.character(tail(EvolucionVisitas$date, n=1))))
+        #return(outvis)
+      #})
+      
+      #myvis %>% bind_shiny("EvolucionVisitas")
+      
+      updateProgress()
     })
   })
   
@@ -330,111 +569,82 @@ shinyServer(function(input, output, session) {
     })
   })
   
-  output$details1 <- renderText({
+  output$details1 <- renderUI({
     # Render values$selectedFeature, if it isn't NULL.
     if (is.null(values$selectedFeature1))
       return(NULL)
     
-    as.character(tags$div(
-      tags$h3(values$selectedFeature1$MSOA11NM),
-      tags$div(
-        evt1(),"'s ",attribute_column[evt1()],": ",
-        values$selectedFeature1[[attribute_column[evt1()]]]
-      )
-    ))
+    print(tags$table(class = "table",
+                     tags$tbody(
+                       tags$tr(
+                         tags$td(values$selectedFeature1$MSOA11NM),
+                         tags$td(
+                           evt1(),"'s ",attribute_column[evt1()],": ",
+                           values$selectedFeature1[[attribute_column[evt1()]]]
+                         )
+                       )
+                     )
+    )
+    )
   })
   
-  
   observe({
-    if(evt2() == "All"){
-      vnm_inc2 <- readOGR("Crime-polygon/all_crime.geojson","OGRGeoJSON", verbose = FALSE)
-      geojson2 <- fromJSON("Crime-polygon/all_crime.geojson")
-    }else{
-      vnm_inc2 <- readOGR(attribute_url[evt2()],"OGRGeoJSON", verbose = FALSE)
-      geojson2 <- fromJSON(attribute_url[evt2()])
-    }
+    event2 <- input$map2_click
+    if (is.null(event2))
+      return()
     
-    max2 = 0
-    for(j in 1:length(geojson2$features)) {
-      value = geojson2$features[[j]]$properties[[attribute_column[evt2()]]]
-      if(value > max2) {
-        max2 = value
-      }
-    }
-    
-    for(j in 1:length(geojson2$features)) {
-      value = geojson2$features[[j]]$properties[[attribute_column[evt2()]]]
-      geojson2$features[[j]]$style <- c(
-        "fillColor" = getColor(value/max2),
-        "weight" = 2,
-        "opacity" = 1,
-        "color" = 'white',
-        "dashArray" = '3',
-        "fillOpacity" = 0.7
-      )
-    }
-    
-    session$onFlushed(once=TRUE, function() {
-      map2$addGeoJSON(geojson2,"choropleth")
-      
-      #create a (QUEEN) contiguity based neighbours
-      
-      vnm_cnq2 <- poly2nb(vnm_inc2)
-      
-      #row-standardised weights matrix
-      vnm_cnq_rsw2 <- nb2listw(vnm_cnq2)
-      
-      #output$moran2 <- renderTable({
-      #compute Moran's I
-      #moran.test(vnminc2$CRDENSITY, listw=vnm_cnq_rsw2)
-      #}
-      
-      #compute Monte Carlo Moranís I
-      set.seed(1234)
-      bperm2 = moran.mc(vnm_inc2$CRDENSITY, listw=vnm_cnq_rsw2, nsim=999)
-      
-      output$moran2Stat <- renderText({
-        print(paste("Statistics: ",bperm2$statistic))
-      })
-      output$moran2PValue <- renderText({
-        print(paste("p-value: ",bperm2$p.value))
-      })
-      
-      #histogram
-      output$hist2 <- renderPlot({
-        h2 <- ({
-          hist(bperm2$res, freq=TRUE, breaks=20, xlab="Simulated Moran's I", main= "Histogram from Monte Carlo Simulation")
-          abline(v=unname(bperm2$statistic), col="red")
-        })
-        print(h2)
-        # it'll show the moran's I statistics and a histogram (to test normality, in addition to p-value)
-      })
-      
-      output$scatterPlot2 <- renderPlot({
-        #computing local moran stats
-        fips2 <- order(vnm_inc2$row)
-        nclocI2 <- localmoran(vnm_inc2$CRDENSITY, vnm_cnq_rsw2)
-        
-        #scatterplot of local moran
-        nci2 <- moran.plot(vnm_inc2$row, vnm_cnq_rsw2, labels=as.character(vnm_inc2$MSOA11NM), xlab="Crime Density", ylab="SL Crime Density")
-      })
+    isolate({
+      # An empty part of the map was clicked.
+      # Null out the selected feature.
+      values$selectedFeature2 <- NULL
     })
   })
   
-  # Chart
+  observe({
+    event2 <- input$map2_geojson_click
+    if (is.null(event2))
+      return()
+    
+    isolate({
+      # A GeoJSON feature was clicked. Save its properties
+      # to selectedFeature.
+      values$selectedFeature2 <- event2$properties
+    })
+  })
   
-  #output$bargraph <- renderPlot({
-  #  df = read.csv('~/Downlosads/all_crime2.csv')
-  #  p <- ggplot(data=df,
-  #              aes(x="Bar Graph",
-  #                  y=E02000011,
-  #                  fill = factor(crimetype)
-  #              )
-  #  )
-  #  
-  #  p=p + geom_bar(stat="identity") 
-  #  
-  #  print(p)
-  #})
-  
+  output$details2 <- renderUI({
+    # Render values$selectedFeature, if it isn't NULL.
+    if (is.null(values$selectedFeature2))
+      return(NULL)
+    
+    print(tags$table(class = "table",
+                     tags$tbody(
+                       tags$tr(
+                         tags$td(values$selectedFeature2$MSOA11NM),
+                         tags$td(
+                           evt2(),"'s ",attribute_column[evt2()],": ",
+                           values$selectedFeature2[[attribute_column[evt2()]]]
+                         )
+                     )
+                     )
+    )
+    )
+  })
+
+# Chart
+
+#output$bargraph <- renderPlot({
+#  df = read.csv('~/Downlosads/all_crime2.csv')
+#  p <- ggplot(data=df,
+#              aes(x="Bar Graph",
+#                  y=E02000011,
+#                  fill = factor(crimetype)
+#              )
+#  )
+#  
+#  p=p + geom_bar(stat="identity") 
+#  
+#  print(p)
+#})
+
 })
